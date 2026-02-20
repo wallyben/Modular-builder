@@ -46,7 +46,27 @@ def main() -> None:
 
     command = sys.argv[1]
 
-    if command == "tender-demo":
+    if command == "prospect-from-award":
+        if len(sys.argv) < 3:
+            print("Usage: python main.py prospect-from-award <path_to_txt>", file=sys.stderr)
+            sys.exit(1)
+        from modules.prospecting import (
+            draft_outreach,
+            extract_award_notice,
+            record_outreach,
+            score_prospect,
+        )
+        from modules.prospecting.tracker import ensure_data_dir
+        ensure_data_dir()
+        text = Path(sys.argv[2]).read_text(encoding="utf-8")
+        award = extract_award_notice(text)
+        prospect = score_prospect(award)
+        draft = draft_outreach(prospect)
+        print(json.dumps(prospect.model_dump(), indent=2))
+        print(json.dumps(draft.model_dump(), indent=2))
+        record_outreach(prospect.company_name, email=None, status="drafted")
+
+    elif command == "tender-demo":
         from modules.tender.demo import run_demo_flow
         result = run_demo_flow(adapter=None)
         summary = result["summary"]
