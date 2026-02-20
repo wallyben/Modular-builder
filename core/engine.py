@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
+from core.adapters.registry import AdapterRegistry
 from core.schemas import (
     Step,
     StepResult,
@@ -20,24 +21,18 @@ from core.state import (
 
 
 # ---------------------------------------------------------------------------
-# Stub adapter — replaced by real adapter registry in Phase 1B+
-# ---------------------------------------------------------------------------
-
-def _stub_adapter(step: Step) -> Any:
-    return {"step": step.id, "adapter": step.adapter, "params": step.params}
-
-
-# ---------------------------------------------------------------------------
 # Step execution with retry ceiling
 # ---------------------------------------------------------------------------
 
-def _execute_step(step: Step) -> StepResult:
+def _execute_step(step: Step, registry: AdapterRegistry) -> StepResult:
+    """Run *step* via its registered adapter, retrying up to ``max_retries``."""
     last_error: str = ""
     max_attempts = step.max_retries + 1
+    adapter = registry.get(step.adapter)
 
     for attempt in range(1, max_attempts + 1):
         try:
-            output = _stub_adapter(step)
+            output: Any = adapter(step)
             return StepResult(
                 step_id=step.id,
                 status=StepStatus.SUCCESS,
@@ -59,7 +54,32 @@ def _execute_step(step: Step) -> StepResult:
 # Deterministic state loop
 # ---------------------------------------------------------------------------
 
-def run(task_def: TaskDefinition) -> TaskContext:
+def run(
+    task_def: TaskDefinition,
+    registry: Optional[AdapterRegistry] = None,
+) -> TaskContext:
+    """Execute *task_def* and return the final :class:`TaskContext`.
+
+    Parameters
+    ----------
+    task_def:
+        The task to execute, including all steps and their dependency graph.
+    registry:
+        Adapter registry to resolve step adapters from.  Defaults to
+        ``core.adapters.default_registry`` (contains all built-ins).
+
+    Returns
+    -------
+    TaskContext
+        Final context whose ``status`` is one of ``SUCCESS``, ``FAILED``, or
+        ``ABORTED``.
+    """
+    if registry is None:
+        # Lazy import avoids a circular-import at module level; the import
+        # triggers built-in registration exactly once.
+        from core.adapters import default_registry  # noqa: PLC0415
+        registry = default_registry
+
     ctx = TaskContext(task=task_def)
     ctx = transition_task(ctx, TaskStatus.RUNNING)
 
@@ -74,30 +94,28 @@ def run(task_def: TaskDefinition) -> TaskContext:
                     r for r in ctx.results.values()
                     if r.status == StepStatus.FAILED
                 ]
-                if failed:
-                    ctx = transition_task(ctx, TaskStatus.FAILED)
-                else:
-                    ctx = transition_task(ctx, TaskStatus.SUCCESS)
+                next_status = TaskStatus.FAILED if failed else TaskStatus.SUCCESS
             else:
-                ctx = transition_task(ctx, TaskStatus.FAILED)
+                # Deadlock — unresolved steps with no runnable candidates
+                next_status = TaskStatus.FAILED
+            ctx = transition_task(ctx, next_status)
             break
 
         for step_id in runnable:
             step = step_map[step_id]
 
+            # Mark step as RUNNING
             pending_result = StepResult(
                 step_id=step_id,
                 status=StepStatus.RUNNING,
                 attempt=1,
             )
             validate_step_transition(StepStatus.PENDING, StepStatus.RUNNING)
-            updated_results = {**ctx.results, step_id: pending_result}
-            ctx = ctx.model_copy(update={"results": updated_results})
+            ctx = ctx.model_copy(update={"results": {**ctx.results, step_id: pending_result}})
 
-            result = _execute_step(step)
-
+            # Execute and record final result
+            result = _execute_step(step, registry)
             validate_step_transition(StepStatus.RUNNING, result.status)
-            updated_results = {**ctx.results, step_id: result}
-            ctx = ctx.model_copy(update={"results": updated_results})
+            ctx = ctx.model_copy(update={"results": {**ctx.results, step_id: result}})
 
     return ctx

@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class TaskStatus(str, Enum):
@@ -70,5 +70,4 @@ class TaskContext(BaseModel):
     current_step_index: int = 0
     task_attempt: int = Field(default=1, ge=1)
 
-    class Config:
-        use_enum_values = False
+    model_config = ConfigDict(use_enum_values=False)
