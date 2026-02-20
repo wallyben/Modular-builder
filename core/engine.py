@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+import logging
+import os
+import subprocess
+import tempfile
+from typing import Any, Callable, Dict, List
 
+from core.buildspec import BuildSpec
 from core.schemas import (
     Step,
     StepResult,
@@ -17,6 +22,123 @@ from core.state import (
     transition_task,
     validate_step_transition,
 )
+
+_LOG = logging.getLogger(__name__)
+
+_BUILD_MAX_RETRIES = 3  # mirrors Step.max_retries default
+
+
+# ---------------------------------------------------------------------------
+# ToolRegistry — minimal callable registry for build-time tools
+# ---------------------------------------------------------------------------
+
+class ToolRegistry:
+    def __init__(self) -> None:
+        self._tools: Dict[str, Callable[..., Any]] = {}
+
+    def register(self, name: str, fn: Callable[..., Any]) -> None:
+        self._tools[name] = fn
+
+    def call(self, name: str, **kwargs: Any) -> Any:
+        if name not in self._tools:
+            raise KeyError(f"Tool not registered: '{name}'")
+        return self._tools[name](**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Default build tools
+# ---------------------------------------------------------------------------
+
+def _tool_generate_file(path: str, content: str) -> None:
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w") as fh:
+        fh.write(content)
+
+
+def _module_stub(name: str, description: str) -> str:
+    return f'"""{description}"""\n\n\ndef placeholder():\n    pass\n'
+
+
+def _run_pytest(directory: str) -> int:
+    result = subprocess.run(
+        ["pytest", directory, "--tb=short", "-q"],
+        capture_output=True,
+        text=True,
+    )
+    _LOG.debug("pytest stdout: %s", result.stdout)
+    _LOG.debug("pytest stderr: %s", result.stderr)
+    return result.returncode
+
+
+# ---------------------------------------------------------------------------
+# BuildEngine
+# ---------------------------------------------------------------------------
+
+class BuildEngine:
+    def __init__(self, max_retries: int = _BUILD_MAX_RETRIES) -> None:
+        self.max_retries = max_retries
+
+    def build(self, buildspec: BuildSpec, output_dir: str = "") -> Dict[str, Any]:
+        _LOG.info("BUILD START project=%s language=%s", buildspec.project_name, buildspec.language)
+
+        registry = ToolRegistry()
+        registry.register("generate_file", _tool_generate_file)
+
+        # PLAN
+        if not output_dir:
+            output_dir = tempfile.mkdtemp(prefix=f"build_{buildspec.project_name}_")
+        _LOG.info("PLAN modules=%d output_dir=%s", len(buildspec.modules), output_dir)
+
+        # GENERATE FILES
+        generated: List[str] = []
+        for module in buildspec.modules:
+            path = os.path.join(output_dir, f"{module.name}.py")
+            content = _module_stub(module.name, module.description)
+            registry.call("generate_file", path=path, content=content)
+            generated.append(path)
+            _LOG.info("GENERATED file=%s", path)
+
+        if len(generated) > buildspec.max_files:
+            _LOG.error(
+                "FAILED max_files exceeded: generated=%d limit=%d",
+                len(generated), buildspec.max_files,
+            )
+            return {
+                "status": "FAILED",
+                "reason": "max_files exceeded",
+                "output_dir": output_dir,
+                "files": generated,
+            }
+
+        # SKIP TESTS
+        if not buildspec.test_required:
+            _LOG.info("DONE tests_required=False")
+            return {"status": "DONE", "output_dir": output_dir, "files": generated}
+
+        # RUN TESTS → PATCH → RE-RUN TESTS
+        for attempt in range(1, self.max_retries + 1):
+            _LOG.info("RUN TESTS attempt=%d/%d", attempt, self.max_retries)
+            exit_code = _run_pytest(output_dir)
+
+            if exit_code == 0:
+                _LOG.info("DONE tests_passed=True attempt=%d", attempt)
+                return {"status": "DONE", "output_dir": output_dir, "files": generated}
+
+            _LOG.warning("TESTS FAILED exit_code=%d attempt=%d", exit_code, attempt)
+
+            if attempt < self.max_retries:
+                _LOG.info("PATCH attempt=%d", attempt)
+                for path in generated:
+                    with open(path, "a") as fh:
+                        fh.write(f"\n# patch-{attempt}: stub reconciliation\n")
+
+        _LOG.error("FAILED after %d attempts", self.max_retries)
+        return {
+            "status": "FAILED",
+            "reason": f"tests failed after {self.max_retries} attempts",
+            "output_dir": output_dir,
+            "files": generated,
+        }
 
 
 # ---------------------------------------------------------------------------
