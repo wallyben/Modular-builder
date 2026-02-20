@@ -1,3 +1,10 @@
+/* ── Disqualify banner ────────────────────────────────────────── */
+.dq-banner { padding: 14px 18px; }
+.dq-list { margin: 10px 0 0 18px; }
+.dq-list li { margin-bottom: 6px; font-size: 14px; }
+.dq-code { font-family: monospace; font-weight: 700; margin-right: 4px; }
+.dq-req  { font-weight: 600; }
+
 /* ── Split scores ─────────────────────────────────────────────── */
 .split-grid {
   display: grid;

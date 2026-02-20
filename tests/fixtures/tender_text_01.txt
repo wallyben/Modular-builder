@@ -1,0 +1,12 @@
+Tender Notice — Professional Services Contract
+
+REQ-01: The supplier must hold valid public liability insurance to a minimum value of €6.5 million per claim.
+REQ-02: A current tax clearance certificate from Revenue must be submitted with the tender response.
+REQ-03: A current safety statement and risk assessment (RAMS) must be provided prior to commencement.
+REQ-04: Audited accounts for the last three financial years must be submitted. Minimum annual turnover of €500,000 is required.
+REQ-05: The supplier shall demonstrate a minimum of 5 years experience delivering similar contracts.
+REQ-06: A method statement outlining the approach to service delivery must be included.
+REQ-07: Staff CVs and evidence of relevant qualifications must be submitted.
+REQ-08: A copy of the company data protection policy must be provided.
+REQ-09: The solution should provide API access for integration with existing systems.
+REQ-10: Pricing information to be submitted using the standard pricing schedule.

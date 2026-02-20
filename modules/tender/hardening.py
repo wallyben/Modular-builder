@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import TypedDict
 
+from modules.tender.schemas import DisqualifyFlag, EvidenceMapItem
+
 # ---------------------------------------------------------------------------
 # Types
 # ---------------------------------------------------------------------------
@@ -135,3 +137,124 @@ def calculate_split_scores(matrix: TenderMatrix, classification: dict) -> dict:
         "mandatory_score": _score(mandatory_set),
         "rated_score": _score(rated_set),
     }
+
+
+# ---------------------------------------------------------------------------
+# 5) Evidence Mapping
+# ---------------------------------------------------------------------------
+
+# Each entry: (pattern, evidence_terms, suggested_artifacts)
+_ARTIFACT_RULES: list[tuple[re.Pattern, list[str], list[str]]] = [
+    (
+        re.compile(r"\binsurance\b", re.IGNORECASE),
+        ["insurance"],
+        ["Insurance Certificate (PDF)"],
+    ),
+    (
+        re.compile(r"\btax\b|\brevenue\b", re.IGNORECASE),
+        ["tax clearance"],
+        ["Tax Clearance / Revenue Statement"],
+    ),
+    (
+        re.compile(r"\bpolicy\b", re.IGNORECASE),
+        ["policy"],
+        ["Relevant Policy Document (DOCX/PDF)"],
+    ),
+    (
+        re.compile(r"\bcvs?\b|\bexperience\b", re.IGNORECASE),
+        ["cv", "experience"],
+        ["Staff CVs", "Case Studies"],
+    ),
+    (
+        re.compile(r"\bmethod\s+statement\b", re.IGNORECASE),
+        ["method statement"],
+        ["Method Statement"],
+    ),
+    (
+        re.compile(r"\brisk\s+assessment\b|\brams\b", re.IGNORECASE),
+        ["risk assessment"],
+        ["Risk Assessment"],
+    ),
+]
+
+
+def build_evidence_map(extraction: TenderExtraction) -> list[EvidenceMapItem]:
+    """For each requirement derive evidence_needed and suggested_artifacts from text keywords."""
+    items: list[EvidenceMapItem] = []
+    for req in extraction:
+        text = req["text"]
+        evidence_needed: list[str] = []
+        suggested_artifacts: list[str] = []
+
+        for pattern, ev_terms, artifacts in _ARTIFACT_RULES:
+            if pattern.search(text):
+                for term in ev_terms:
+                    if term not in evidence_needed:
+                        evidence_needed.append(term)
+                for art in artifacts:
+                    if art not in suggested_artifacts:
+                        suggested_artifacts.append(art)
+
+        if not suggested_artifacts:
+            suggested_artifacts = ["Supporting Document"]
+
+        items.append(
+            EvidenceMapItem(
+                requirement_id=req["id"],
+                evidence_needed=evidence_needed,
+                suggested_artifacts=suggested_artifacts,
+            )
+        )
+    return items
+
+
+# ---------------------------------------------------------------------------
+# 6) Disqualification Risk Flags
+# ---------------------------------------------------------------------------
+
+# Each entry: (pattern, code, message)
+_DISQUALIFY_RULES: list[tuple[re.Pattern, str, str]] = [
+    (
+        re.compile(r"\binsurance\b", re.IGNORECASE),
+        "insurance",
+        "Insurance requirement detected — certificate must be current and adequate.",
+    ),
+    (
+        re.compile(r"\btax\s+clearance\b|\brevenue\b", re.IGNORECASE),
+        "tax_clearance",
+        "Tax clearance requirement detected — certificate must be current.",
+    ),
+    (
+        re.compile(r"\bsafety\s+statement\b|\brams\b|\brisk\s+assessment\b", re.IGNORECASE),
+        "health_safety",
+        "Health & safety requirement detected — RAMS / safety statement required.",
+    ),
+    (
+        re.compile(r"\baudited\s+accounts\b|\bturnover\b", re.IGNORECASE),
+        "financials",
+        "Financial requirement detected — audited accounts or turnover threshold applies.",
+    ),
+    (
+        re.compile(
+            r"\bminimum\b.{0,50}\byears\b|\byears\b.{0,50}\bexperience\b"
+            r"|\bminimum\b.{0,50}\bexperience\b",
+            re.IGNORECASE | re.DOTALL,
+        ),
+        "experience",
+        "Experience requirement detected — minimum years / experience threshold applies.",
+    ),
+]
+
+
+def detect_disqualify_flags(extraction: TenderExtraction) -> list[DisqualifyFlag]:
+    """Return a DisqualifyFlag for each requirement that matches a disqualification pattern."""
+    flags: list[DisqualifyFlag] = []
+    for req in extraction:
+        text = req["text"]
+        req_id = req["id"]
+        for pattern, code, message in _DISQUALIFY_RULES:
+            if pattern.search(text):
+                flags.append(
+                    DisqualifyFlag(code=code, requirement_id=req_id, message=message)  # type: ignore[arg-type]
+                )
+    return flags

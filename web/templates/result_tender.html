@@ -78,4 +78,44 @@
   {% endfor %}
 </ul>
 {% endif %}
+
+{% if disqualify_flags %}
+<h2>Disqualification Risk</h2>
+<div class="alert-error dq-banner">
+  <strong>&#9888; {{ disqualify_flags | length }} potential disqualification risk(s) detected:</strong>
+  <ul class="dq-list">
+    {% for flag in disqualify_flags %}
+    <li>
+      <span class="dq-code">[{{ flag.code }}]</span>
+      {% if flag.requirement_id %}<span class="dq-req">Req {{ flag.requirement_id }}</span> — {% endif %}
+      {{ flag.message }}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if evidence_map %}
+<h2>Evidence Map</h2>
+<div class="card" style="padding: 0; overflow: hidden;">
+  <table>
+    <thead>
+      <tr>
+        <th style="width:90px">Req ID</th>
+        <th>Evidence Needed</th>
+        <th>Suggested Artifacts</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in evidence_map %}
+      <tr>
+        <td>{{ item.requirement_id }}</td>
+        <td>{{ item.evidence_needed | join(", ") or "—" }}</td>
+        <td>{{ item.suggested_artifacts | join(", ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}

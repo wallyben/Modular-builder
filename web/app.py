@@ -13,8 +13,10 @@ from fastapi.templating import Jinja2Templates
 from modules.tender.hardening import (
     TenderExtraction,
     TenderMatrix,
+    build_evidence_map,
     calculate_split_scores,
     classify_requirement_levels,
+    detect_disqualify_flags,
     detect_mandatory_gaps,
 )
 
@@ -154,6 +156,8 @@ async def tender_submit(request: Request, file: UploadFile = File(...)) -> HTMLR
     classification = classify_requirement_levels(extraction)
     mandatory_gaps = detect_mandatory_gaps(tender_matrix, classification["mandatory_ids"])
     split_scores = calculate_split_scores(tender_matrix, classification)
+    evidence_map = build_evidence_map(extraction)
+    disqualify_flags = detect_disqualify_flags(extraction)
 
     global _last_tender
     _last_tender = {"requirements": requirements, "matrix": matrix, "score": score, "gaps": gaps}
@@ -169,6 +173,8 @@ async def tender_submit(request: Request, file: UploadFile = File(...)) -> HTMLR
             "classification": classification,
             "mandatory_gaps": mandatory_gaps,
             "split_scores": split_scores,
+            "evidence_map": evidence_map,
+            "disqualify_flags": disqualify_flags,
         },
     )
 
