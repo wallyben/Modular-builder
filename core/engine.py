@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from adapters.base import LLMAdapter
+from adapters.openai_adapter import OpenAIAdapter
 from core.adapters.registry import AdapterRegistry
 from core.schemas import (
     Step,
@@ -57,6 +59,7 @@ def _execute_step(step: Step, registry: AdapterRegistry) -> StepResult:
 def run(
     task_def: TaskDefinition,
     registry: Optional[AdapterRegistry] = None,
+    llm_adapter: Optional[LLMAdapter] = None,
 ) -> TaskContext:
     """Execute *task_def* and return the final :class:`TaskContext`.
 
@@ -74,9 +77,10 @@ def run(
         Final context whose ``status`` is one of ``SUCCESS``, ``FAILED``, or
         ``ABORTED``.
     """
+    if llm_adapter is None:
+        llm_adapter = OpenAIAdapter()
+
     if registry is None:
-        # Lazy import avoids a circular-import at module level; the import
-        # triggers built-in registration exactly once.
         from core.adapters import default_registry  # noqa: PLC0415
         registry = default_registry
 

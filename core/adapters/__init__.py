@@ -18,6 +18,7 @@ Built-in adapters (registered on import)
 
 from core.adapters.base import Adapter
 from core.adapters.builtin import echo_adapter, fail_adapter, http_adapter
+from core.adapters.builtin.llm import llm_anthropic_adapter, llm_openai_adapter
 from core.adapters.registry import AdapterRegistry, default_registry
 
 # -----------------------------------------------------------------------
@@ -26,6 +27,8 @@ from core.adapters.registry import AdapterRegistry, default_registry
 default_registry.register("echo", echo_adapter)
 default_registry.register("http", http_adapter)
 default_registry.register("fail", fail_adapter)
+default_registry.register("llm.openai", llm_openai_adapter)
+default_registry.register("llm.anthropic", llm_anthropic_adapter)
 
 __all__ = [
     "Adapter",
