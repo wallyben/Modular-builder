@@ -16,6 +16,36 @@
 &nbsp;
 <a class="btn btn-outline" href="/tender">Analyse another</a>
 
+{% if classification %}
+<h2>Requirement Classification</h2>
+<div class="card split-scores-card">
+  <div class="split-grid">
+    <div class="split-cell">
+      <span class="split-label">Mandatory</span>
+      <span class="split-count">{{ classification.mandatory_ids | length }}</span>
+      <span class="split-score">Score: {{ "%.0f" | format(split_scores.mandatory_score * 100) }}%</span>
+    </div>
+    <div class="split-cell">
+      <span class="split-label">Rated</span>
+      <span class="split-count">{{ classification.rated_ids | length }}</span>
+      <span class="split-score">Score: {{ "%.0f" | format(split_scores.rated_score * 100) }}%</span>
+    </div>
+    <div class="split-cell">
+      <span class="split-label">Info only</span>
+      <span class="split-count">{{ classification.info_ids | length }}</span>
+      <span class="split-score">&nbsp;</span>
+    </div>
+  </div>
+
+  {% if mandatory_gaps %}
+  <div class="alert-error" style="margin-top:16px">
+    <strong>&#9888; Mandatory gaps detected ({{ mandatory_gaps | length }}):</strong>
+    requirement IDs {{ mandatory_gaps | join(", ") }} are not met.
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
 <h2>Compliance Matrix</h2>
 <div class="card" style="padding: 0; overflow: hidden;">
   <table>

@@ -1,0 +1,137 @@
+from __future__ import annotations
+
+import re
+from typing import TypedDict
+
+# ---------------------------------------------------------------------------
+# Types
+# ---------------------------------------------------------------------------
+
+class RequirementItem(TypedDict):
+    id: str
+    text: str
+    level: str  # "mandatory" | "rated" | "info"
+
+
+# TenderExtraction: list of RequirementItems
+TenderExtraction = list[RequirementItem]
+
+class MatrixRow(TypedDict):
+    requirement_id: str
+    status: str  # "met" | "partial" | "not_met" | ""
+
+
+# TenderMatrix: list of MatrixRows
+TenderMatrix = list[MatrixRow]
+
+
+# ---------------------------------------------------------------------------
+# 1) Mandatory vs Rated Separation
+# ---------------------------------------------------------------------------
+
+_MANDATORY_PATTERN = re.compile(
+    r"\b(must|shall|mandatory|required|require)\b", re.IGNORECASE
+)
+_RATED_PATTERN = re.compile(
+    r"\b(should|may|desirable|preferred|rated|scored)\b", re.IGNORECASE
+)
+
+
+def classify_requirement_levels(extraction: TenderExtraction) -> dict:
+    """Classify each requirement as mandatory, rated, or info.
+
+    Returns:
+        {
+            "mandatory_ids": list[str],
+            "rated_ids": list[str],
+            "info_ids": list[str],
+        }
+    """
+    mandatory_ids: list[str] = []
+    rated_ids: list[str] = []
+    info_ids: list[str] = []
+
+    for req in extraction:
+        req_id = req["id"]
+        text = req["text"]
+        if _MANDATORY_PATTERN.search(text):
+            mandatory_ids.append(req_id)
+        elif _RATED_PATTERN.search(text):
+            rated_ids.append(req_id)
+        else:
+            info_ids.append(req_id)
+
+    return {
+        "mandatory_ids": mandatory_ids,
+        "rated_ids": rated_ids,
+        "info_ids": info_ids,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 2) Mandatory Gap Detector
+# ---------------------------------------------------------------------------
+
+def detect_mandatory_gaps(matrix: TenderMatrix, mandatory_ids: list[str]) -> list[str]:
+    """Return requirement_ids from mandatory_ids where status != 'met'."""
+    mandatory_set = set(mandatory_ids)
+    return [
+        row["requirement_id"]
+        for row in matrix
+        if row["requirement_id"] in mandatory_set and row["status"] != "met"
+    ]
+
+
+# ---------------------------------------------------------------------------
+# 3) Risk Language Detector
+# ---------------------------------------------------------------------------
+
+GENERIC_PHRASES = [
+    "best in class",
+    "industry-leading",
+    "world class",
+    "cutting edge",
+    "state of the art",
+    "innovative solutions",
+    "leading provider",
+]
+
+
+def detect_generic_language(text: str) -> list[str]:
+    """Return phrases from GENERIC_PHRASES found in text (case-insensitive)."""
+    lower = text.lower()
+    return [phrase for phrase in GENERIC_PHRASES if phrase in lower]
+
+
+# ---------------------------------------------------------------------------
+# 4) Coverage Split Scoring
+# ---------------------------------------------------------------------------
+
+_STATUS_SCORE = {"met": 1.0, "partial": 0.5}
+
+
+def calculate_split_scores(matrix: TenderMatrix, classification: dict) -> dict:
+    """Return separate compliance scores for mandatory and rated requirements.
+
+    Score calculation: met=1, partial=0.5, anything else=0.
+
+    Returns:
+        {
+            "mandatory_score": float,  # 0.0 – 1.0
+            "rated_score": float,      # 0.0 – 1.0
+        }
+    """
+    mandatory_set = set(classification.get("mandatory_ids", []))
+    rated_set = set(classification.get("rated_ids", []))
+
+    def _score(id_set: set) -> float:
+        rows = [row for row in matrix if row["requirement_id"] in id_set]
+        if not rows:
+            return 0.0
+        total = sum(_STATUS_SCORE.get(row["status"], 0.0) for row in rows)
+        return round(total / len(rows), 4)
+
+    return {
+        "mandatory_score": _score(mandatory_set),
+        "rated_score": _score(rated_set),
+    }

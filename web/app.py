@@ -10,6 +10,14 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from modules.tender.hardening import (
+    TenderExtraction,
+    TenderMatrix,
+    calculate_split_scores,
+    classify_requirement_levels,
+    detect_mandatory_gaps,
+)
+
 # ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
@@ -134,6 +142,19 @@ async def tender_submit(request: Request, file: UploadFile = File(...)) -> HTMLR
     score = score_matrix(matrix)
     gaps = identify_evidence_gaps(matrix)
 
+    # --- Hardening layer ---
+    extraction: TenderExtraction = [
+        {"id": str(row["id"]), "text": row["requirement"], "level": ""}
+        for row in matrix
+    ]
+    tender_matrix: TenderMatrix = [
+        {"requirement_id": str(row["id"]), "status": row.get("status", "")}
+        for row in matrix
+    ]
+    classification = classify_requirement_levels(extraction)
+    mandatory_gaps = detect_mandatory_gaps(tender_matrix, classification["mandatory_ids"])
+    split_scores = calculate_split_scores(tender_matrix, classification)
+
     global _last_tender
     _last_tender = {"requirements": requirements, "matrix": matrix, "score": score, "gaps": gaps}
 
@@ -145,6 +166,9 @@ async def tender_submit(request: Request, file: UploadFile = File(...)) -> HTMLR
             "matrix": matrix,
             "score": score,
             "gaps": gaps,
+            "classification": classification,
+            "mandatory_gaps": mandatory_gaps,
+            "split_scores": split_scores,
         },
     )
 
