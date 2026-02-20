@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% set active = "tender" %}
+
+{% block title %}Tender Analysis — Modular Builder{% endblock %}
+
+{% block content %}
+<h1>Tender Analysis</h1>
+<p>Upload a plain-text (.txt) tender document to extract requirements and build a compliance matrix.</p>
+
+{% if error %}
+<div class="alert-error">{{ error }}</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" action="/tender" enctype="multipart/form-data">
+    <div class="form-group">
+      <label for="file">Tender document (.txt)</label>
+      <input type="file" id="file" name="file" accept=".txt" required />
+    </div>
+    <button class="btn btn-primary" type="submit">Analyse</button>
+  </form>
+</div>
+{% endblock %}

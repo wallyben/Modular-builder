@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Modular Builder{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <a class="brand" href="/">Modular Builder</a>
+    <nav>
+      <a href="/" {% if active == 'home' %}class="active"{% endif %}>Home</a>
+      <a href="/tender" {% if active == 'tender' %}class="active"{% endif %}>Tender</a>
+      <a href="/prospect" {% if active == 'prospect' %}class="active"{% endif %}>Prospect</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+</main>
+
+</body>
+</html>

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% set active = "home" %}
+
+{% block title %}Home — Modular Builder{% endblock %}
+
+{% block content %}
+<div class="hero">
+  <h1>Modular Builder</h1>
+  <p>Internal tooling for tender analysis and prospect intelligence. No login required.</p>
+</div>
+
+<div class="action-grid">
+  <a class="action-card" href="/tender">
+    <div class="card-icon">📄</div>
+    <h3>Tender Analysis</h3>
+    <p>Upload a .txt tender document. Extract requirements, build a compliance matrix, and identify evidence gaps.</p>
+  </a>
+  <a class="action-card" href="/prospect">
+    <div class="card-icon">🔍</div>
+    <h3>Prospect Intelligence</h3>
+    <p>Paste an award notice URL. Score the prospect fit and generate a draft outreach message.</p>
+  </a>
+</div>
+{% endblock %}

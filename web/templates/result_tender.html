@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% set active = "tender" %}
+
+{% block title %}Tender Results — Modular Builder{% endblock %}
+
+{% block content %}
+<h1>Tender Analysis Results</h1>
+
+<div class="score-badge">
+  Score: {{ score.compliant }} / {{ score.total }}
+  &nbsp;·&nbsp;
+  {{ score.score_pct }}%
+</div>
+
+<a class="btn btn-outline" href="/download-docx">Download DOCX</a>
+&nbsp;
+<a class="btn btn-outline" href="/tender">Analyse another</a>
+
+<h2>Compliance Matrix</h2>
+<div class="card" style="padding: 0; overflow: hidden;">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Requirement</th>
+        <th>Compliant</th>
+        <th>Evidence</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in matrix %}
+      <tr>
+        <td>{{ row.id }}</td>
+        <td>{{ row.requirement }}</td>
+        <td>{{ "✓" if row.compliant else ("✗" if row.compliant == false else "—") }}</td>
+        <td>{{ row.evidence or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if gaps %}
+<h2>Evidence Gaps</h2>
+<ul class="gap-list">
+  {% for gap in gaps %}
+  <li>{{ gap }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

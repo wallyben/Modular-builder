@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% set active = "prospect" %}
+
+{% block title %}Prospect Results — Modular Builder{% endblock %}
+
+{% block content %}
+<h1>Prospect Analysis Results</h1>
+<p style="font-size:13px; color:#718096; margin-bottom:24px;">Source: <a href="{{ url }}" target="_blank" rel="noopener">{{ url }}</a></p>
+
+<div class="score-badge">
+  Fit score: {{ score.fit_score }} / {{ score.max_score }}
+</div>
+
+<a class="btn btn-outline" href="/prospect">Analyse another</a>
+
+<h2>Award Notice</h2>
+<div class="card">
+  <table>
+    <tbody>
+      <tr><th style="width:140px">Buyer</th><td>{{ notice.buyer }}</td></tr>
+      <tr><th>Value</th><td>{{ notice.value }}</td></tr>
+      <tr><th>Supplier</th><td>{{ notice.supplier }}</td></tr>
+      <tr><th>Date</th><td>{{ notice.date }}</td></tr>
+      <tr><th>Description</th><td>{{ notice.description }}</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2>Fit Rationale</h2>
+<div class="card">
+  <p style="margin:0">{{ score.rationale }}</p>
+</div>
+
+<h2>Draft Outreach</h2>
+<pre class="outreach-box">{{ outreach }}</pre>
+{% endblock %}
