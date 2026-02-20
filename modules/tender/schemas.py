@@ -32,3 +32,21 @@ class TenderMatrix(BaseModel):
     model_config = {"extra": "forbid"}
 
     rows: List[ComplianceRow]
+
+
+class CoverageSummary(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    total: int
+    met: int
+    partial: int
+    missing: int
+    score: float
+    missing_ids: List[str]
+
+
+class EvidenceGap(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    requirement_id: str
+    missing_evidence: List[str]
