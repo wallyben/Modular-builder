@@ -46,7 +46,16 @@ def main() -> None:
 
     command = sys.argv[1]
 
-    if command == "tender-matrix":
+    if command == "tender-demo":
+        from modules.tender.demo import run_demo_flow
+        result = run_demo_flow(adapter=None)
+        summary = result["summary"]
+        extraction = result["extraction"]
+        print(json.dumps(summary.model_dump(), indent=2))
+        print(f"Requirements: {len(extraction.requirements)}")
+        print(f"Score: {summary.score:.2%}")
+
+    elif command == "tender-matrix":
         if len(sys.argv) < 3:
             print("Usage: python main.py tender-matrix <path> [--score]", file=sys.stderr)
             sys.exit(1)
