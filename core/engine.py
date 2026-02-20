@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 from typing import Any, Callable, Dict, List
 
+from core.artifact_validator import ArtifactValidator
 from core.buildspec import BuildSpec
 from core.schemas import (
     Step,
@@ -110,21 +111,41 @@ class BuildEngine:
                 "files": generated,
             }
 
-        # SKIP TESTS
+        # SKIP TESTS — still run validation
         if not buildspec.test_required:
+            validator = ArtifactValidator(output_dir, generated, last_pytest_exit_code=0)
+            validator.validate_file_count(buildspec.max_files)
+            validator.validate_required_modules(buildspec.modules)
+            validator.validate_tests_pass(test_required=False)
+            if not validator.validate_build_integrity():
+                _LOG.error("FAILED validation after no-test run")
+                return {
+                    "status": "FAILED",
+                    "reason": "artifact validation failed",
+                    "output_dir": output_dir,
+                    "files": generated,
+                }
             _LOG.info("DONE tests_required=False")
             return {"status": "DONE", "output_dir": output_dir, "files": generated}
 
-        # RUN TESTS → PATCH → RE-RUN TESTS
+        # RUN TESTS → VALIDATE → PATCH → RE-RUN TESTS
+        exit_code = 1
         for attempt in range(1, self.max_retries + 1):
             _LOG.info("RUN TESTS attempt=%d/%d", attempt, self.max_retries)
             exit_code = _run_pytest(output_dir)
 
-            if exit_code == 0:
+            _LOG.info("VALIDATE attempt=%d", attempt)
+            validator = ArtifactValidator(output_dir, generated, last_pytest_exit_code=exit_code)
+            validator.validate_file_count(buildspec.max_files)
+            validator.validate_required_modules(buildspec.modules)
+            validator.validate_tests_pass(buildspec.test_required)
+            integrity_ok = validator.validate_build_integrity()
+
+            if exit_code == 0 and integrity_ok:
                 _LOG.info("DONE tests_passed=True attempt=%d", attempt)
                 return {"status": "DONE", "output_dir": output_dir, "files": generated}
 
-            _LOG.warning("TESTS FAILED exit_code=%d attempt=%d", exit_code, attempt)
+            _LOG.warning("TESTS/VALIDATE FAILED exit_code=%d integrity=%s attempt=%d", exit_code, integrity_ok, attempt)
 
             if attempt < self.max_retries:
                 _LOG.info("PATCH attempt=%d", attempt)
@@ -135,7 +156,7 @@ class BuildEngine:
         _LOG.error("FAILED after %d attempts", self.max_retries)
         return {
             "status": "FAILED",
-            "reason": f"tests failed after {self.max_retries} attempts",
+            "reason": f"tests/validation failed after {self.max_retries} attempts",
             "output_dir": output_dir,
             "files": generated,
         }
