@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from adapters.base import LLMAdapter
 from adapters.openai_adapter import OpenAIAdapter
 from core.adapters.registry import AdapterRegistry
+from core.run_logger import write_run_log
 from core.schemas import (
     Step,
     StepResult,
@@ -22,12 +25,15 @@ from core.state import (
 )
 
 
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 # ---------------------------------------------------------------------------
 # Step execution with retry ceiling
 # ---------------------------------------------------------------------------
 
 def _execute_step(step: Step, registry: AdapterRegistry) -> StepResult:
-    """Run *step* via its registered adapter, retrying up to ``max_retries``."""
     last_error: str = ""
     max_attempts = step.max_retries + 1
     adapter = registry.get(step.adapter)
@@ -61,22 +67,6 @@ def run(
     registry: Optional[AdapterRegistry] = None,
     llm_adapter: Optional[LLMAdapter] = None,
 ) -> TaskContext:
-    """Execute *task_def* and return the final :class:`TaskContext`.
-
-    Parameters
-    ----------
-    task_def:
-        The task to execute, including all steps and their dependency graph.
-    registry:
-        Adapter registry to resolve step adapters from.  Defaults to
-        ``core.adapters.default_registry`` (contains all built-ins).
-
-    Returns
-    -------
-    TaskContext
-        Final context whose ``status`` is one of ``SUCCESS``, ``FAILED``, or
-        ``ABORTED``.
-    """
     if llm_adapter is None:
         llm_adapter = OpenAIAdapter()
 
@@ -84,8 +74,20 @@ def run(
         from core.adapters import default_registry  # noqa: PLC0415
         registry = default_registry
 
+    run_id = str(uuid.uuid4())
+    start_ts = _now()
+    state_history: List[str] = []
+    tool_calls: List[str] = []
+    validation_failures: int = 0
+
+    def _transition(ctx: TaskContext, target: TaskStatus) -> TaskContext:
+        result = transition_task(ctx, target)
+        state_history.append(result.status.value)
+        return result
+
     ctx = TaskContext(task=task_def)
-    ctx = transition_task(ctx, TaskStatus.RUNNING)
+    state_history.append(ctx.status.value)
+    ctx = _transition(ctx, TaskStatus.RUNNING)
 
     step_map: Dict[str, Step] = {s.id: s for s in task_def.steps}
 
@@ -94,32 +96,46 @@ def run(
 
         if not runnable:
             if all_steps_resolved(ctx):
-                failed = [
-                    r for r in ctx.results.values()
-                    if r.status == StepStatus.FAILED
-                ]
+                failed = [r for r in ctx.results.values() if r.status == StepStatus.FAILED]
                 next_status = TaskStatus.FAILED if failed else TaskStatus.SUCCESS
             else:
-                # Deadlock — unresolved steps with no runnable candidates
                 next_status = TaskStatus.FAILED
-            ctx = transition_task(ctx, next_status)
+            ctx = _transition(ctx, next_status)
             break
 
         for step_id in runnable:
             step = step_map[step_id]
 
-            # Mark step as RUNNING
-            pending_result = StepResult(
-                step_id=step_id,
-                status=StepStatus.RUNNING,
-                attempt=1,
-            )
-            validate_step_transition(StepStatus.PENDING, StepStatus.RUNNING)
+            pending_result = StepResult(step_id=step_id, status=StepStatus.RUNNING, attempt=1)
+            try:
+                validate_step_transition(StepStatus.PENDING, StepStatus.RUNNING)
+            except ValueError:
+                validation_failures += 1
+                raise
             ctx = ctx.model_copy(update={"results": {**ctx.results, step_id: pending_result}})
 
-            # Execute and record final result
+            tool_calls.append(step.adapter)
             result = _execute_step(step, registry)
-            validate_step_transition(StepStatus.RUNNING, result.status)
+
+            try:
+                validate_step_transition(StepStatus.RUNNING, result.status)
+            except ValueError:
+                validation_failures += 1
+                raise
             ctx = ctx.model_copy(update={"results": {**ctx.results, step_id: result}})
+
+    retry_count = sum(max(r.attempt - 1, 0) for r in ctx.results.values())
+
+    write_run_log({
+        "run_id": run_id,
+        "start_timestamp": start_ts,
+        "end_timestamp": _now(),
+        "model_name": type(llm_adapter).__name__,
+        "state_history": state_history,
+        "retry_count": retry_count,
+        "tool_calls": tool_calls,
+        "validation_failures": validation_failures,
+        "final_state": ctx.status.value,
+    })
 
     return ctx
